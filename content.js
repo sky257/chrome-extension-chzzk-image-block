@@ -5,6 +5,8 @@ const STYLE_ID = "chzzk-image-blocker-style";
 const HIGHLIGHT_CLASS_NAME = "chzzk-text-highlight";
 const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
+const PLAYER_SELECTOR = ".pzp-pc, .pzp-pc__video, video";
+const FOCUS_CLICK_GUARD_MS = 800;
 const HIGHLIGHT_TEXT = "하이라이트";
 const EXCLUDED_HIGHLIGHT_PREFIX = "2분 ";
 
@@ -85,6 +87,84 @@ function startShortcutListener() {
     },
     true
   );
+}
+
+function startFocusClickGuard() {
+  let armed = false;
+  let activeGesture = false;
+  let timeoutId = null;
+
+  function clearGuard() {
+    armed = false;
+    activeGesture = false;
+    clearTimeout(timeoutId);
+  }
+
+  function armGuard() {
+    armed = true;
+    activeGesture = false;
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(clearGuard, FOCUS_CLICK_GUARD_MS);
+  }
+
+  function isPlayerActivationClick(event) {
+    if (isEditableTarget(event.target)) return false;
+    if (activeGesture) return true;
+    if (!armed) return false;
+
+    return Boolean(
+      document.fullscreenElement ||
+        event.target?.closest?.(PLAYER_SELECTOR)
+    );
+  }
+
+  function blockEvent(event) {
+    if (!isPlayerActivationClick(event)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    if (
+      event.type === "pointerdown" ||
+      event.type === "mousedown" ||
+      event.type === "touchstart"
+    ) {
+      armed = false;
+      activeGesture = true;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(clearGuard, FOCUS_CLICK_GUARD_MS);
+      return;
+    }
+
+    if (
+      event.type === "click" ||
+      event.type === "dblclick" ||
+      event.type === "pointerup" ||
+      event.type === "mouseup" ||
+      event.type === "touchend"
+    ) {
+      clearGuard();
+    }
+  }
+
+  [
+    "pointerdown",
+    "pointerup",
+    "mousedown",
+    "mouseup",
+    "touchstart",
+    "touchend",
+    "click",
+    "dblclick"
+  ].forEach((type) => {
+    document.addEventListener(type, blockEvent, true);
+  });
+
+  window.addEventListener("focus", armGuard);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) armGuard();
+  });
 }
 
 function shouldSkipNode(node) {
@@ -238,3 +318,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 startHighlighting();
 startShortcutListener();
+startFocusClickGuard();
