@@ -5,8 +5,7 @@ const STYLE_ID = "chzzk-image-blocker-style";
 const HIGHLIGHT_CLASS_NAME = "chzzk-text-highlight";
 const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
-const PLAYER_SELECTOR = ".pzp-pc, .pzp-pc__video, video";
-const FOCUS_CLICK_GUARD_MS = 800;
+const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
 const HIGHLIGHT_TEXT = "하이라이트";
 const EXCLUDED_HIGHLIGHT_PREFIX = "2분 ";
 
@@ -34,6 +33,14 @@ html .${HIGHLIGHT_CLASS_NAME} {
 
 html.${CONTROL_BAR_HIDDEN_CLASS_NAME} ${CONTROL_BAR_SELECTOR} {
   display: none !important;
+}
+
+#${FULLSCREEN_CLICK_BLOCKER_ID} {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  background: transparent !important;
+  pointer-events: auto !important;
 }
 `;
 
@@ -89,82 +96,63 @@ function startShortcutListener() {
   );
 }
 
-function startFocusClickGuard() {
-  let armed = false;
-  let activeGesture = false;
-  let timeoutId = null;
-
-  function clearGuard() {
-    armed = false;
-    activeGesture = false;
-    clearTimeout(timeoutId);
-  }
-
-  function armGuard() {
-    armed = true;
-    activeGesture = false;
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(clearGuard, FOCUS_CLICK_GUARD_MS);
-  }
-
-  function isPlayerActivationClick(event) {
-    if (isEditableTarget(event.target)) return false;
-    if (activeGesture) return true;
-    if (!armed) return false;
-
-    return Boolean(
-      document.fullscreenElement ||
-        event.target?.closest?.(PLAYER_SELECTOR)
-    );
-  }
-
-  function blockEvent(event) {
-    if (!isPlayerActivationClick(event)) return;
-
+function stopMouseEvent(event) {
+  if (event.type !== "mousemove" && event.type !== "pointermove") {
     event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-
-    if (
-      event.type === "pointerdown" ||
-      event.type === "mousedown" ||
-      event.type === "touchstart"
-    ) {
-      armed = false;
-      activeGesture = true;
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(clearGuard, FOCUS_CLICK_GUARD_MS);
-      return;
-    }
-
-    if (
-      event.type === "click" ||
-      event.type === "dblclick" ||
-      event.type === "pointerup" ||
-      event.type === "mouseup" ||
-      event.type === "touchend"
-    ) {
-      clearGuard();
-    }
   }
+
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+}
+
+function createFullscreenClickBlocker() {
+  const blocker = document.createElement("div");
+  blocker.id = FULLSCREEN_CLICK_BLOCKER_ID;
+  blocker.setAttribute("aria-hidden", "true");
 
   [
     "pointerdown",
+    "pointermove",
     "pointerup",
+    "pointercancel",
     "mousedown",
     "mouseup",
     "touchstart",
     "touchend",
     "click",
-    "dblclick"
+    "auxclick",
+    "dblclick",
+    "contextmenu",
+    "mousemove",
+    "wheel"
   ].forEach((type) => {
-    document.addEventListener(type, blockEvent, true);
+    blocker.addEventListener(type, stopMouseEvent, true);
+    blocker.addEventListener(type, stopMouseEvent, false);
   });
 
-  window.addEventListener("focus", armGuard);
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) armGuard();
-  });
+  return blocker;
+}
+
+function updateFullscreenClickBlocker() {
+  ensureStyle();
+
+  const fullscreenElement = document.fullscreenElement;
+  const blocker = document.getElementById(FULLSCREEN_CLICK_BLOCKER_ID);
+
+  if (!fullscreenElement) {
+    blocker?.remove();
+    return;
+  }
+
+  if (blocker && blocker.parentElement === fullscreenElement) return;
+
+  blocker?.remove();
+  fullscreenElement.appendChild(createFullscreenClickBlocker());
+}
+
+function startFullscreenClickBlocker() {
+  document.addEventListener("fullscreenchange", updateFullscreenClickBlocker);
+  updateFullscreenClickBlocker();
 }
 
 function shouldSkipNode(node) {
@@ -318,4 +306,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 startHighlighting();
 startShortcutListener();
-startFocusClickGuard();
+startFullscreenClickBlocker();
