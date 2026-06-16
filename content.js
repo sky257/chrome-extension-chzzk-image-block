@@ -1,7 +1,10 @@
 const STORAGE_KEY = "hideChzzkImages";
+const CONTROL_BAR_STORAGE_KEY = "hideChzzkControlBar";
 const CLASS_NAME = "chzzk-image-blocker-enabled";
 const STYLE_ID = "chzzk-image-blocker-style";
 const HIGHLIGHT_CLASS_NAME = "chzzk-text-highlight";
+const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
+const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
 const HIGHLIGHT_TEXT = "하이라이트";
 const EXCLUDED_HIGHLIGHT_PREFIX = "2분 ";
 
@@ -26,6 +29,10 @@ html .${HIGHLIGHT_CLASS_NAME} {
   background: #7cff7c !important;
   color: black !important;
 }
+
+html.${CONTROL_BAR_HIDDEN_CLASS_NAME} ${CONTROL_BAR_SELECTOR} {
+  display: none !important;
+}
 `;
 
 function ensureStyle() {
@@ -40,6 +47,44 @@ function ensureStyle() {
 function setImageBlocking(enabled) {
   ensureStyle();
   document.documentElement.classList.toggle(CLASS_NAME, Boolean(enabled));
+}
+
+function toggleControlBar() {
+  ensureStyle();
+  const enabled = document.documentElement.classList.toggle(
+    CONTROL_BAR_HIDDEN_CLASS_NAME
+  );
+  chrome.storage.local.set({ [CONTROL_BAR_STORAGE_KEY]: enabled });
+}
+
+function setControlBarHidden(enabled) {
+  ensureStyle();
+  document.documentElement.classList.toggle(
+    CONTROL_BAR_HIDDEN_CLASS_NAME,
+    Boolean(enabled)
+  );
+}
+
+function isEditableTarget(target) {
+  return Boolean(
+    target?.closest?.("input, textarea, select, [contenteditable]:not([contenteditable='false'])")
+  );
+}
+
+function startShortcutListener() {
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.defaultPrevented || event.isComposing) return;
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      if (event.key?.toLowerCase() !== "i") return;
+      if (isEditableTarget(event.target)) return;
+
+      event.preventDefault();
+      toggleControlBar();
+    },
+    true
+  );
 }
 
 function shouldSkipNode(node) {
@@ -168,9 +213,20 @@ chrome.storage.local.get({ [STORAGE_KEY]: true }, (items) => {
   setImageBlocking(items[STORAGE_KEY]);
 });
 
+chrome.storage.local.get({ [CONTROL_BAR_STORAGE_KEY]: false }, (items) => {
+  setControlBarHidden(items[CONTROL_BAR_STORAGE_KEY]);
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !changes[STORAGE_KEY]) return;
-  setImageBlocking(changes[STORAGE_KEY].newValue);
+  if (areaName !== "local") return;
+
+  if (changes[STORAGE_KEY]) {
+    setImageBlocking(changes[STORAGE_KEY].newValue);
+  }
+
+  if (changes[CONTROL_BAR_STORAGE_KEY]) {
+    setControlBarHidden(changes[CONTROL_BAR_STORAGE_KEY].newValue);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -181,3 +237,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 startHighlighting();
+startShortcutListener();
