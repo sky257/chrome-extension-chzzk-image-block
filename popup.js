@@ -10,6 +10,10 @@ const SETTINGS = {
   fullscreenClickBlocker: {
     key: "blockFullscreenClicks",
     defaultValue: true
+  },
+  highlightCardFilter: {
+    key: "filterHighlightCardsOnly",
+    defaultValue: false
   }
 };
 

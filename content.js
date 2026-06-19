@@ -2,9 +2,11 @@ const STORAGE_KEY = "hideChzzkImages";
 const CONTROL_BAR_STORAGE_KEY = "hideChzzkControlBar";
 const HIGHLIGHT_STORAGE_KEY = "highlightChzzkText";
 const FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY = "blockFullscreenClicks";
+const HIGHLIGHT_CARD_FILTER_STORAGE_KEY = "filterHighlightCardsOnly";
 const CLASS_NAME = "chzzk-image-blocker-enabled";
 const STYLE_ID = "chzzk-image-blocker-style";
 const HIGHLIGHT_CLASS_NAME = "chzzk-text-highlight";
+const HIGHLIGHT_CARD_FILTERED_CLASS_NAME = "chzzk-highlight-card-filtered";
 const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
 const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
@@ -12,6 +14,7 @@ const HIGHLIGHT_TEXT = "하이라이트";
 const EXCLUDED_HIGHLIGHT_PREFIX = "2분 ";
 
 let highlightObserver = null;
+let highlightCardFilterObserver = null;
 let fullscreenClickBlockerEnabled = true;
 
 const BLOCKING_CSS = `
@@ -34,6 +37,10 @@ html.${CLASS_NAME} video[poster] {
 html .${HIGHLIGHT_CLASS_NAME} {
   background: #7cff7c !important;
   color: black !important;
+}
+
+html .${HIGHLIGHT_CARD_FILTERED_CLASS_NAME} {
+  display: none !important;
 }
 
 html.${CONTROL_BAR_HIDDEN_CLASS_NAME} ${CONTROL_BAR_SELECTOR} {
@@ -306,6 +313,127 @@ function setHighlighting(enabled) {
   });
 }
 
+function normalizeText(text) {
+  return (text || "").replace(/\s+/g, " ").trim();
+}
+
+function isAllowedHighlightTitle(text) {
+  const normalizedText = normalizeText(text);
+  return (
+    normalizedText.includes(HIGHLIGHT_TEXT) &&
+    !normalizedText.includes(EXCLUDED_HIGHLIGHT_PREFIX + HIGHLIGHT_TEXT)
+  );
+}
+
+function getCardTitleText(element) {
+  const titleElement = element.querySelector?.(
+    "[title], strong, h1, h2, h3, h4, [class*='title'], [class*='Title']"
+  );
+  const titleText = titleElement?.getAttribute?.("title") || titleElement?.textContent;
+  const fallbackText = element.getAttribute?.("title") || element.textContent;
+
+  return normalizeText(titleText || fallbackText);
+}
+
+function isCardCandidate(element) {
+  if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+  if (element.id === FULLSCREEN_CLICK_BLOCKER_ID) return false;
+  if (element.closest?.(`.${HIGHLIGHT_CARD_FILTERED_CLASS_NAME}`)) return true;
+  if (element.closest?.("header, nav, footer, aside, script, style, noscript")) {
+    return false;
+  }
+
+  const text = getCardTitleText(element);
+  if (text.length < 4 || text.length > 160) return false;
+
+  const href = element.getAttribute?.("href") || "";
+  const hasMedia = Boolean(
+    element.querySelector?.("img, picture, video, canvas, [class*='thumb'], [class*='Thumb']")
+  );
+  const looksLikeContentLink = /(?:clip|video|vod|news|content|lounge|watch)/i.test(href);
+
+  return hasMedia || looksLikeContentLink;
+}
+
+function findCardRoot(element) {
+  return (
+    element.closest?.("li, article, [class*='card'], [class*='Card'], [class*='item'], [class*='Item']") ||
+    element
+  );
+}
+
+function filterHighlightCards(root = document) {
+  ensureStyle();
+
+  const scope = root.nodeType === Node.ELEMENT_NODE || root.nodeType === Node.DOCUMENT_NODE
+    ? root
+    : document;
+
+  const candidates = [];
+
+  if (isCardCandidate(scope)) {
+    candidates.push(scope);
+  }
+
+  scope.querySelectorAll?.("a[href], [role='link']").forEach((element) => {
+    if (isCardCandidate(element)) {
+      candidates.push(element);
+    }
+  });
+
+  candidates.forEach((candidate) => {
+    const card = findCardRoot(candidate);
+    const title = getCardTitleText(candidate);
+    card.classList.toggle(
+      HIGHLIGHT_CARD_FILTERED_CLASS_NAME,
+      !isAllowedHighlightTitle(title)
+    );
+  });
+}
+
+function clearHighlightCardFilter() {
+  highlightCardFilterObserver?.disconnect();
+  highlightCardFilterObserver = null;
+  document
+    .querySelectorAll(`.${HIGHLIGHT_CARD_FILTERED_CLASS_NAME}`)
+    .forEach((element) => {
+      element.classList.remove(HIGHLIGHT_CARD_FILTERED_CLASS_NAME);
+    });
+}
+
+function setHighlightCardFilter(enabled) {
+  if (!enabled) {
+    clearHighlightCardFilter();
+    return;
+  }
+
+  filterHighlightCards(document);
+
+  if (highlightCardFilterObserver) return;
+
+  highlightCardFilterObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === "characterData") {
+        const parent = mutation.target.parentElement;
+        filterHighlightCards(
+          parent?.closest?.("a[href], [role='link']") || parent || document
+        );
+        continue;
+      }
+
+      for (const node of mutation.addedNodes) {
+        filterHighlightCards(node);
+      }
+    }
+  });
+
+  highlightCardFilterObserver.observe(document.documentElement, {
+    childList: true,
+    characterData: true,
+    subtree: true
+  });
+}
+
 chrome.storage.local.get({ [STORAGE_KEY]: true }, (items) => {
   setImageBlocking(items[STORAGE_KEY]);
 });
@@ -322,6 +450,13 @@ chrome.storage.local.get(
   { [FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY]: true },
   (items) => {
     setFullscreenClickBlocking(items[FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY]);
+  }
+);
+
+chrome.storage.local.get(
+  { [HIGHLIGHT_CARD_FILTER_STORAGE_KEY]: false },
+  (items) => {
+    setHighlightCardFilter(items[HIGHLIGHT_CARD_FILTER_STORAGE_KEY]);
   }
 );
 
@@ -344,6 +479,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     setFullscreenClickBlocking(
       changes[FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY].newValue
     );
+  }
+
+  if (changes[HIGHLIGHT_CARD_FILTER_STORAGE_KEY]) {
+    setHighlightCardFilter(changes[HIGHLIGHT_CARD_FILTER_STORAGE_KEY].newValue);
   }
 });
 
