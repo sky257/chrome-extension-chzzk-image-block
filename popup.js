@@ -1,35 +1,56 @@
-const STORAGE_KEY = "hideChzzkImages";
-
-const toggle = document.getElementById("toggle");
-const statusText = document.getElementById("status");
-
-function updateStatus(enabled) {
-  statusText.textContent = enabled ? "숨김 켜짐" : "숨김 꺼짐";
-}
-
-async function notifyActiveTab(enabled) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.url?.startsWith("https://chzzk.naver.com/")) return;
-
-  try {
-    await chrome.tabs.sendMessage(tab.id, {
-      type: "SET_CHZZK_IMAGE_BLOCKING",
-      enabled
-    });
-  } catch {
-    // The content script may not be ready on a just-opened tab. Storage still applies.
+const SETTINGS = {
+  images: {
+    key: "hideChzzkImages",
+    defaultValue: true
+  },
+  highlight: {
+    key: "highlightChzzkText",
+    defaultValue: true
+  },
+  fullscreenClickBlocker: {
+    key: "blockFullscreenClicks",
+    defaultValue: true
   }
+};
+
+function getDefaults() {
+  return Object.fromEntries(
+    Object.values(SETTINGS).map((setting) => [
+      setting.key,
+      setting.defaultValue
+    ])
+  );
 }
 
-chrome.storage.local.get({ [STORAGE_KEY]: true }, (items) => {
-  const enabled = Boolean(items[STORAGE_KEY]);
+function updateStatus(name, enabled) {
+  const status = document.querySelector(`[data-status="${name}"]`);
+  if (!status) return;
+
+  status.textContent = enabled ? "켜짐" : "꺼짐";
+}
+
+function updateToggle(name, enabled) {
+  const toggle = document.querySelector(`[data-setting="${name}"]`);
+  if (!toggle) return;
+
   toggle.checked = enabled;
-  updateStatus(enabled);
+  updateStatus(name, enabled);
+}
+
+chrome.storage.local.get(getDefaults(), (items) => {
+  for (const [name, setting] of Object.entries(SETTINGS)) {
+    updateToggle(name, Boolean(items[setting.key]));
+  }
 });
 
-toggle.addEventListener("change", async () => {
-  const enabled = toggle.checked;
-  await chrome.storage.local.set({ [STORAGE_KEY]: enabled });
-  updateStatus(enabled);
-  await notifyActiveTab(enabled);
+document.querySelectorAll("[data-setting]").forEach((toggle) => {
+  toggle.addEventListener("change", async () => {
+    const name = toggle.dataset.setting;
+    const setting = SETTINGS[name];
+    if (!setting) return;
+
+    const enabled = toggle.checked;
+    await chrome.storage.local.set({ [setting.key]: enabled });
+    updateStatus(name, enabled);
+  });
 });

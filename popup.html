@@ -8,17 +8,51 @@
   </head>
   <body>
     <main class="popup">
-      <div>
-        <h1>치지직 이미지</h1>
-        <p id="status">상태 확인 중</p>
-      </div>
+      <header class="header">
+        <h1>치지직 이미지 차단</h1>
+        <p>기능별 설정</p>
+      </header>
 
-      <label class="switch" aria-label="이미지 숨김 토글">
-        <input id="toggle" type="checkbox">
-        <span class="track">
-          <span class="thumb"></span>
-        </span>
-      </label>
+      <section class="settings" aria-label="기능 설정">
+        <label class="setting">
+          <span>
+            <span class="setting-title">이미지 숨김</span>
+            <span class="setting-status" data-status="images">확인 중</span>
+          </span>
+          <span class="switch">
+            <input data-setting="images" type="checkbox">
+            <span class="track">
+              <span class="thumb"></span>
+            </span>
+          </span>
+        </label>
+
+        <label class="setting">
+          <span>
+            <span class="setting-title">하이라이트 강조</span>
+            <span class="setting-status" data-status="highlight">확인 중</span>
+          </span>
+          <span class="switch">
+            <input data-setting="highlight" type="checkbox">
+            <span class="track">
+              <span class="thumb"></span>
+            </span>
+          </span>
+        </label>
+
+        <label class="setting">
+          <span>
+            <span class="setting-title">전체화면 클릭 차단</span>
+            <span class="setting-status" data-status="fullscreenClickBlocker">확인 중</span>
+          </span>
+          <span class="switch">
+            <input data-setting="fullscreenClickBlocker" type="checkbox">
+            <span class="track">
+              <span class="thumb"></span>
+            </span>
+          </span>
+        </label>
+      </section>
     </main>
 
     <script src="popup.js"></script>

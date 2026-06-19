@@ -1,5 +1,7 @@
 const STORAGE_KEY = "hideChzzkImages";
 const CONTROL_BAR_STORAGE_KEY = "hideChzzkControlBar";
+const HIGHLIGHT_STORAGE_KEY = "highlightChzzkText";
+const FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY = "blockFullscreenClicks";
 const CLASS_NAME = "chzzk-image-blocker-enabled";
 const STYLE_ID = "chzzk-image-blocker-style";
 const HIGHLIGHT_CLASS_NAME = "chzzk-text-highlight";
@@ -8,6 +10,9 @@ const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
 const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
 const HIGHLIGHT_TEXT = "하이라이트";
 const EXCLUDED_HIGHLIGHT_PREFIX = "2분 ";
+
+let highlightObserver = null;
+let fullscreenClickBlockerEnabled = true;
 
 const BLOCKING_CSS = `
 html.${CLASS_NAME} img,
@@ -139,7 +144,7 @@ function updateFullscreenClickBlocker() {
   const fullscreenElement = document.fullscreenElement;
   const blocker = document.getElementById(FULLSCREEN_CLICK_BLOCKER_ID);
 
-  if (!fullscreenElement) {
+  if (!fullscreenClickBlockerEnabled || !fullscreenElement) {
     blocker?.remove();
     return;
   }
@@ -148,6 +153,11 @@ function updateFullscreenClickBlocker() {
 
   blocker?.remove();
   fullscreenElement.appendChild(createFullscreenClickBlocker());
+}
+
+function setFullscreenClickBlocking(enabled) {
+  fullscreenClickBlockerEnabled = Boolean(enabled);
+  updateFullscreenClickBlocker();
 }
 
 function startFullscreenClickBlocker() {
@@ -253,11 +263,30 @@ function processNode(root) {
   textNodes.forEach(processTextNode);
 }
 
-function startHighlighting() {
+function removeHighlights() {
+  document.querySelectorAll(`.${HIGHLIGHT_CLASS_NAME}`).forEach((highlight) => {
+    const textNode = document.createTextNode(highlight.textContent || "");
+    const parent = highlight.parentNode;
+    highlight.replaceWith(textNode);
+    parent?.normalize();
+  });
+}
+
+function setHighlighting(enabled) {
   ensureStyle();
+
+  if (!enabled) {
+    highlightObserver?.disconnect();
+    highlightObserver = null;
+    removeHighlights();
+    return;
+  }
+
   processNode(document.body || document.documentElement);
 
-  const observer = new MutationObserver((mutations) => {
+  if (highlightObserver) return;
+
+  highlightObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === "characterData") {
         processTextNode(mutation.target);
@@ -270,7 +299,7 @@ function startHighlighting() {
     }
   });
 
-  observer.observe(document.documentElement, {
+  highlightObserver.observe(document.documentElement, {
     childList: true,
     characterData: true,
     subtree: true
@@ -285,6 +314,17 @@ chrome.storage.local.get({ [CONTROL_BAR_STORAGE_KEY]: false }, (items) => {
   setControlBarHidden(items[CONTROL_BAR_STORAGE_KEY]);
 });
 
+chrome.storage.local.get({ [HIGHLIGHT_STORAGE_KEY]: true }, (items) => {
+  setHighlighting(items[HIGHLIGHT_STORAGE_KEY]);
+});
+
+chrome.storage.local.get(
+  { [FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY]: true },
+  (items) => {
+    setFullscreenClickBlocking(items[FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY]);
+  }
+);
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
 
@@ -295,6 +335,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes[CONTROL_BAR_STORAGE_KEY]) {
     setControlBarHidden(changes[CONTROL_BAR_STORAGE_KEY].newValue);
   }
+
+  if (changes[HIGHLIGHT_STORAGE_KEY]) {
+    setHighlighting(changes[HIGHLIGHT_STORAGE_KEY].newValue);
+  }
+
+  if (changes[FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY]) {
+    setFullscreenClickBlocking(
+      changes[FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY].newValue
+    );
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -304,6 +354,5 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   sendResponse({ ok: true });
 });
 
-startHighlighting();
 startShortcutListener();
 startFullscreenClickBlocker();
