@@ -37,7 +37,7 @@ html.${CONTROL_BAR_HIDDEN_CLASS_NAME} ${CONTROL_BAR_SELECTOR} {
 
 #${FULLSCREEN_CLICK_BLOCKER_ID} {
   position: fixed !important;
-  inset: 0 !important;
+  inset: 200px 0 !important;
   z-index: 2147483647 !important;
   background: transparent !important;
   pointer-events: auto !important;
