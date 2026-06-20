@@ -10,11 +10,14 @@ const HIGHLIGHT_CARD_FILTERED_CLASS_NAME = "chzzk-highlight-card-filtered";
 const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
 const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
+const CUSTOM_HIGHLIGHT_NAME = "chzzk-text-highlight";
 const HIGHLIGHT_TEXT = "하이라이트";
 const EXCLUDED_HIGHLIGHT_PREFIX = "2분 ";
 
 let highlightObserver = null;
+let highlightRefreshTimer = null;
 let highlightCardFilterObserver = null;
+let highlightCardFilterRefreshTimer = null;
 let fullscreenClickBlockerEnabled = true;
 
 const BLOCKING_CSS = `
@@ -37,6 +40,11 @@ html.${CLASS_NAME} video[poster] {
 html .${HIGHLIGHT_CLASS_NAME} {
   background: #7cff7c !important;
   color: black !important;
+}
+
+html::highlight(${CUSTOM_HIGHLIGHT_NAME}) {
+  background: #7cff7c;
+  color: black;
 }
 
 html .${HIGHLIGHT_CARD_FILTERED_CLASS_NAME} {
@@ -178,7 +186,7 @@ function shouldSkipNode(node) {
 
   return Boolean(
     parent.closest(
-      `.${HIGHLIGHT_CLASS_NAME}, script, style, noscript, textarea, input`
+      `script, style, noscript, textarea, input`
     )
   );
 }
@@ -203,74 +211,9 @@ function getTextBeforeNode(node) {
   return text;
 }
 
-function processTextNode(node) {
-  if (!node) return;
-  if (shouldSkipNode(node)) return;
-
-  const text = node.nodeValue || "";
-  if (!text.includes(HIGHLIGHT_TEXT)) return;
-
-  const textBeforeNode = getTextBeforeNode(node);
-  const fragment = document.createDocumentFragment();
-  let cursor = 0;
-  let hasHighlight = false;
-
-  while (cursor < text.length) {
-    const index = text.indexOf(HIGHLIGHT_TEXT, cursor);
-
-    if (index === -1) {
-      fragment.append(document.createTextNode(text.slice(cursor)));
-      break;
-    }
-
-    const textBeforeMatch = textBeforeNode + text.slice(0, index);
-    const isExcluded = textBeforeMatch.endsWith(EXCLUDED_HIGHLIGHT_PREFIX);
-
-    fragment.append(document.createTextNode(text.slice(cursor, index)));
-
-    if (isExcluded) {
-      fragment.append(document.createTextNode(HIGHLIGHT_TEXT));
-    } else {
-      const highlight = document.createElement("span");
-      highlight.className = HIGHLIGHT_CLASS_NAME;
-      highlight.textContent = HIGHLIGHT_TEXT;
-      fragment.append(highlight);
-      hasHighlight = true;
-    }
-
-    cursor = index + HIGHLIGHT_TEXT.length;
-  }
-
-  if (hasHighlight) {
-    node.replaceWith(fragment);
-  }
-}
-
-function processNode(root) {
-  if (!root) return;
-
-  if (root.nodeType === Node.TEXT_NODE) {
-    processTextNode(root);
-    return;
-  }
-
-  if (root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_NODE) {
-    return;
-  }
-
-  if (root.classList?.contains(HIGHLIGHT_CLASS_NAME)) return;
-
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const textNodes = [];
-
-  while (walker.nextNode()) {
-    textNodes.push(walker.currentNode);
-  }
-
-  textNodes.forEach(processTextNode);
-}
-
 function removeHighlights() {
+  CSS.highlights?.delete?.(CUSTOM_HIGHLIGHT_NAME);
+
   document.querySelectorAll(`.${HIGHLIGHT_CLASS_NAME}`).forEach((highlight) => {
     const textNode = document.createTextNode(highlight.textContent || "");
     const parent = highlight.parentNode;
@@ -279,31 +222,81 @@ function removeHighlights() {
   });
 }
 
+function collectHighlightRanges(root = document.body || document.documentElement) {
+  if (!root || !("Highlight" in window) || !CSS.highlights) return [];
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const ranges = [];
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (shouldSkipNode(node)) continue;
+
+    const text = node.nodeValue || "";
+    if (!text.includes(HIGHLIGHT_TEXT)) continue;
+
+    const textBeforeNode = getTextBeforeNode(node);
+    let cursor = 0;
+
+    while (cursor < text.length) {
+      const index = text.indexOf(HIGHLIGHT_TEXT, cursor);
+      if (index === -1) break;
+
+      const textBeforeMatch = textBeforeNode + text.slice(0, index);
+      const isExcluded = textBeforeMatch.endsWith(EXCLUDED_HIGHLIGHT_PREFIX);
+
+      if (!isExcluded) {
+        const range = new Range();
+        range.setStart(node, index);
+        range.setEnd(node, index + HIGHLIGHT_TEXT.length);
+        ranges.push(range);
+      }
+
+      cursor = index + HIGHLIGHT_TEXT.length;
+    }
+  }
+
+  return ranges;
+}
+
+function refreshHighlights() {
+  highlightRefreshTimer = null;
+  removeHighlights();
+
+  if (!("Highlight" in window) || !CSS.highlights) return;
+
+  const ranges = collectHighlightRanges();
+  CSS.highlights.set(CUSTOM_HIGHLIGHT_NAME, new Highlight(...ranges));
+}
+
+function scheduleHighlightRefresh() {
+  if (highlightRefreshTimer) {
+    clearTimeout(highlightRefreshTimer);
+  }
+
+  highlightRefreshTimer = setTimeout(refreshHighlights, 150);
+}
+
 function setHighlighting(enabled) {
   ensureStyle();
 
   if (!enabled) {
     highlightObserver?.disconnect();
     highlightObserver = null;
+    if (highlightRefreshTimer) {
+      clearTimeout(highlightRefreshTimer);
+      highlightRefreshTimer = null;
+    }
     removeHighlights();
     return;
   }
 
-  processNode(document.body || document.documentElement);
+  refreshHighlights();
 
   if (highlightObserver) return;
 
-  highlightObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === "characterData") {
-        processTextNode(mutation.target);
-        continue;
-      }
-
-      for (const node of mutation.addedNodes) {
-        processNode(node);
-      }
-    }
+  highlightObserver = new MutationObserver(() => {
+    scheduleHighlightRefresh();
   });
 
   highlightObserver.observe(document.documentElement, {
@@ -327,12 +320,39 @@ function isAllowedHighlightTitle(text) {
 
 function getCardTitleText(element) {
   const titleElement = element.querySelector?.(
-    "[title], strong, h1, h2, h3, h4, [class*='title'], [class*='Title']"
+    "a[class*='title'], a[class*='Title'], [class*='title'], [class*='Title'], strong, h1, h2, h3, h4"
   );
   const titleText = titleElement?.getAttribute?.("title") || titleElement?.textContent;
   const fallbackText = element.getAttribute?.("title") || element.textContent;
 
   return normalizeText(titleText || fallbackText);
+}
+
+function getBestCardTitleText(card, candidate) {
+  const titleCandidates = [
+    ...card.querySelectorAll(
+      "a[class*='title'], a[class*='Title'], [class*='title'], [class*='Title'], strong, h1, h2, h3, h4"
+    )
+  ];
+
+  const videoTitle = titleCandidates.find((element) => {
+    const text = normalizeText(element.getAttribute?.("title") || element.textContent);
+    const href = element.getAttribute?.("href") || "";
+    return text.length >= 4 && text.length <= 160 && /\/video\//.test(href);
+  });
+
+  const titleElement =
+    videoTitle ||
+    titleCandidates.find((element) => {
+      const text = normalizeText(element.getAttribute?.("title") || element.textContent);
+      return text.length >= 4 && text.length <= 160;
+    });
+
+  return normalizeText(
+    titleElement?.getAttribute?.("title") ||
+      titleElement?.textContent ||
+      getCardTitleText(candidate)
+  );
 }
 
 function isCardCandidate(element) {
@@ -369,21 +389,20 @@ function filterHighlightCards(root = document) {
     ? root
     : document;
 
-  const candidates = [];
+  const cards = new Map();
 
-  if (isCardCandidate(scope)) {
-    candidates.push(scope);
+  if (scope.matches?.("a[href], [role='link']") && isCardCandidate(scope)) {
+    cards.set(findCardRoot(scope), scope);
   }
 
   scope.querySelectorAll?.("a[href], [role='link']").forEach((element) => {
     if (isCardCandidate(element)) {
-      candidates.push(element);
+      cards.set(findCardRoot(element), element);
     }
   });
 
-  candidates.forEach((candidate) => {
-    const card = findCardRoot(candidate);
-    const title = getCardTitleText(candidate);
+  cards.forEach((candidate, card) => {
+    const title = getBestCardTitleText(card, candidate);
     card.classList.toggle(
       HIGHLIGHT_CARD_FILTERED_CLASS_NAME,
       !isAllowedHighlightTitle(title)
@@ -391,14 +410,36 @@ function filterHighlightCards(root = document) {
   });
 }
 
-function clearHighlightCardFilter() {
-  highlightCardFilterObserver?.disconnect();
-  highlightCardFilterObserver = null;
+function removeHighlightCardFilterClasses() {
   document
     .querySelectorAll(`.${HIGHLIGHT_CARD_FILTERED_CLASS_NAME}`)
     .forEach((element) => {
       element.classList.remove(HIGHLIGHT_CARD_FILTERED_CLASS_NAME);
     });
+}
+
+function clearHighlightCardFilter() {
+  highlightCardFilterObserver?.disconnect();
+  highlightCardFilterObserver = null;
+  if (highlightCardFilterRefreshTimer) {
+    clearTimeout(highlightCardFilterRefreshTimer);
+    highlightCardFilterRefreshTimer = null;
+  }
+  removeHighlightCardFilterClasses();
+}
+
+function refreshHighlightCardFilter() {
+  highlightCardFilterRefreshTimer = null;
+  removeHighlightCardFilterClasses();
+  filterHighlightCards(document);
+}
+
+function scheduleHighlightCardFilterRefresh() {
+  if (highlightCardFilterRefreshTimer) {
+    clearTimeout(highlightCardFilterRefreshTimer);
+  }
+
+  highlightCardFilterRefreshTimer = setTimeout(refreshHighlightCardFilter, 150);
 }
 
 function setHighlightCardFilter(enabled) {
@@ -407,24 +448,12 @@ function setHighlightCardFilter(enabled) {
     return;
   }
 
-  filterHighlightCards(document);
+  refreshHighlightCardFilter();
 
   if (highlightCardFilterObserver) return;
 
-  highlightCardFilterObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === "characterData") {
-        const parent = mutation.target.parentElement;
-        filterHighlightCards(
-          parent?.closest?.("a[href], [role='link']") || parent || document
-        );
-        continue;
-      }
-
-      for (const node of mutation.addedNodes) {
-        filterHighlightCards(node);
-      }
-    }
+  highlightCardFilterObserver = new MutationObserver(() => {
+    scheduleHighlightCardFilterRefresh();
   });
 
   highlightCardFilterObserver.observe(document.documentElement, {
