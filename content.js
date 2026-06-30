@@ -14,7 +14,8 @@ const PLAY_TIME_HIDDEN_CLASS_NAME = "chzzk-play-time-hidden";
 const PLAY_PROGRESS_HIDDEN_CLASS_NAME = "chzzk-play-progress-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
 const PLAY_TIME_SELECTOR = "span[class*='_time_']";
-const PLAY_PROGRESS_SELECTOR = "div[class*='_progress_'], div[class*='_guage_']";
+const PLAY_PROGRESS_SELECTOR = ":is(div[class*='_progress_'], div[class*='_guage_'], .pzp-pc__progress-slider, .pzp-progress-slider, .pzp-ui-progress, .pzp-ui-progress__wrap, .pzp-ui-slider__wrap)";
+const PLAY_PROGRESS_GUAGE_SELECTOR = ":is(div[class*='_guage_'])";
 const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
 const CUSTOM_HIGHLIGHT_NAME = "chzzk-text-highlight";
 const HIGHLIGHT_TEXT = "하이라이트";
@@ -70,6 +71,10 @@ html.${PLAY_PROGRESS_HIDDEN_CLASS_NAME} ${PLAY_PROGRESS_SELECTOR} {
   display: none !important;
 }
 
+html:not(.${PLAY_PROGRESS_HIDDEN_CLASS_NAME}) ${PLAY_PROGRESS_GUAGE_SELECTOR} {
+  display: block !important;
+}
+
 #${FULLSCREEN_CLICK_BLOCKER_ID} {
   position: fixed !important;
   inset: 200px 0 !important;
@@ -80,7 +85,13 @@ html.${PLAY_PROGRESS_HIDDEN_CLASS_NAME} ${PLAY_PROGRESS_SELECTOR} {
 `;
 
 function ensureStyle() {
-  if (document.getElementById(STYLE_ID)) return;
+  const existingStyle = document.getElementById(STYLE_ID);
+  if (existingStyle) {
+    if (existingStyle.textContent !== BLOCKING_CSS) {
+      existingStyle.textContent = BLOCKING_CSS;
+    }
+    return;
+  }
 
   const style = document.createElement("style");
   style.id = STYLE_ID;
