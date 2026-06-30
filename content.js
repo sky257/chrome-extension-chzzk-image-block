@@ -11,7 +11,7 @@ const HIGHLIGHT_CARD_FILTERED_CLASS_NAME = "chzzk-highlight-card-filtered";
 const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
 const PLAY_TIME_HIDDEN_CLASS_NAME = "chzzk-play-time-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
-const PLAY_TIME_SELECTOR = "._time_ul5zy_123, [class*='_time_']";
+const PLAY_TIME_SELECTOR = "span[class*='_time_']";
 const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
 const CUSTOM_HIGHLIGHT_NAME = "chzzk-text-highlight";
 const HIGHLIGHT_TEXT = "하이라이트";
@@ -504,7 +504,7 @@ chrome.storage.local.get(
   }
 );
 
-chrome.storage.local.get({ [PLAY_TIME_STORAGE_KEY]: false }, (items) => {
+chrome.storage.local.get({ [PLAY_TIME_STORAGE_KEY]: true }, (items) => {
   setPlayTimeHidden(items[PLAY_TIME_STORAGE_KEY]);
 });
 

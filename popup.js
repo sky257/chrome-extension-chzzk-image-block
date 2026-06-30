@@ -17,7 +17,7 @@ const SETTINGS = {
   },
   playTime: {
     key: "hidePlayTime",
-    defaultValue: false
+    defaultValue: true
   }
 };
 
