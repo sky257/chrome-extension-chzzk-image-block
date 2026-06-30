@@ -18,6 +18,10 @@ const SETTINGS = {
   playTime: {
     key: "hidePlayTime",
     defaultValue: true
+  },
+  playProgress: {
+    key: "hidePlayProgress",
+    defaultValue: false
   }
 };
 

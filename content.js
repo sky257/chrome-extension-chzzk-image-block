@@ -4,18 +4,22 @@ const HIGHLIGHT_STORAGE_KEY = "highlightChzzkText";
 const FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY = "blockFullscreenClicks";
 const HIGHLIGHT_CARD_FILTER_STORAGE_KEY = "filterHighlightCardsOnly";
 const PLAY_TIME_STORAGE_KEY = "hidePlayTime";
+const PLAY_PROGRESS_STORAGE_KEY = "hidePlayProgress";
 const CLASS_NAME = "chzzk-image-blocker-enabled";
 const STYLE_ID = "chzzk-image-blocker-style";
 const HIGHLIGHT_CLASS_NAME = "chzzk-text-highlight";
 const HIGHLIGHT_CARD_FILTERED_CLASS_NAME = "chzzk-highlight-card-filtered";
 const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
 const PLAY_TIME_HIDDEN_CLASS_NAME = "chzzk-play-time-hidden";
+const PLAY_PROGRESS_HIDDEN_CLASS_NAME = "chzzk-play-progress-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
 const PLAY_TIME_SELECTOR = "span[class*='_time_']";
+const PLAY_PROGRESS_SELECTOR = "div[class*='_progress_'], div[class*='_guage_']";
 const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
 const CUSTOM_HIGHLIGHT_NAME = "chzzk-text-highlight";
 const HIGHLIGHT_TEXT = "하이라이트";
 const EXCLUDED_HIGHLIGHT_PREFIX = "2분 ";
+const FIFA_WORLD_CUP_TEXT = "fifa 북중미 월드컵";
 
 let highlightObserver = null;
 let highlightRefreshTimer = null;
@@ -62,6 +66,10 @@ html.${PLAY_TIME_HIDDEN_CLASS_NAME} ${PLAY_TIME_SELECTOR} {
   display: none !important;
 }
 
+html.${PLAY_PROGRESS_HIDDEN_CLASS_NAME} ${PLAY_PROGRESS_SELECTOR} {
+  display: none !important;
+}
+
 #${FULLSCREEN_CLICK_BLOCKER_ID} {
   position: fixed !important;
   inset: 200px 0 !important;
@@ -105,6 +113,14 @@ function setPlayTimeHidden(enabled) {
   ensureStyle();
   document.documentElement.classList.toggle(
     PLAY_TIME_HIDDEN_CLASS_NAME,
+    Boolean(enabled)
+  );
+}
+
+function setPlayProgressHidden(enabled) {
+  ensureStyle();
+  document.documentElement.classList.toggle(
+    PLAY_PROGRESS_HIDDEN_CLASS_NAME,
     Boolean(enabled)
   );
 }
@@ -327,9 +343,15 @@ function normalizeText(text) {
 
 function isAllowedHighlightTitle(text) {
   const normalizedText = normalizeText(text);
+  const compactText = normalizedText.replace(/\s+/g, "");
+
+  if (normalizedText.toLowerCase().includes(FIFA_WORLD_CUP_TEXT)) {
+    return true;
+  }
+
   return (
     normalizedText.includes(HIGHLIGHT_TEXT) &&
-    !normalizedText.includes(EXCLUDED_HIGHLIGHT_PREFIX + HIGHLIGHT_TEXT)
+    !/\d+분하이라이트/.test(compactText)
   );
 }
 
@@ -508,6 +530,10 @@ chrome.storage.local.get({ [PLAY_TIME_STORAGE_KEY]: true }, (items) => {
   setPlayTimeHidden(items[PLAY_TIME_STORAGE_KEY]);
 });
 
+chrome.storage.local.get({ [PLAY_PROGRESS_STORAGE_KEY]: false }, (items) => {
+  setPlayProgressHidden(items[PLAY_PROGRESS_STORAGE_KEY]);
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
 
@@ -535,6 +561,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
   if (changes[PLAY_TIME_STORAGE_KEY]) {
     setPlayTimeHidden(changes[PLAY_TIME_STORAGE_KEY].newValue);
+  }
+
+  if (changes[PLAY_PROGRESS_STORAGE_KEY]) {
+    setPlayProgressHidden(changes[PLAY_PROGRESS_STORAGE_KEY].newValue);
   }
 });
 
