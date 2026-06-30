@@ -3,12 +3,15 @@ const CONTROL_BAR_STORAGE_KEY = "hideChzzkControlBar";
 const HIGHLIGHT_STORAGE_KEY = "highlightChzzkText";
 const FULLSCREEN_CLICK_BLOCKER_STORAGE_KEY = "blockFullscreenClicks";
 const HIGHLIGHT_CARD_FILTER_STORAGE_KEY = "filterHighlightCardsOnly";
+const PLAY_TIME_STORAGE_KEY = "hidePlayTime";
 const CLASS_NAME = "chzzk-image-blocker-enabled";
 const STYLE_ID = "chzzk-image-blocker-style";
 const HIGHLIGHT_CLASS_NAME = "chzzk-text-highlight";
 const HIGHLIGHT_CARD_FILTERED_CLASS_NAME = "chzzk-highlight-card-filtered";
 const CONTROL_BAR_HIDDEN_CLASS_NAME = "chzzk-control-bar-hidden";
+const PLAY_TIME_HIDDEN_CLASS_NAME = "chzzk-play-time-hidden";
 const CONTROL_BAR_SELECTOR = ".pzp-pc__bottom";
+const PLAY_TIME_SELECTOR = "._time_ul5zy_123, [class*='_time_']";
 const FULLSCREEN_CLICK_BLOCKER_ID = "chzzk-fullscreen-click-blocker";
 const CUSTOM_HIGHLIGHT_NAME = "chzzk-text-highlight";
 const HIGHLIGHT_TEXT = "하이라이트";
@@ -55,6 +58,10 @@ html.${CONTROL_BAR_HIDDEN_CLASS_NAME} ${CONTROL_BAR_SELECTOR} {
   display: none !important;
 }
 
+html.${PLAY_TIME_HIDDEN_CLASS_NAME} ${PLAY_TIME_SELECTOR} {
+  display: none !important;
+}
+
 #${FULLSCREEN_CLICK_BLOCKER_ID} {
   position: fixed !important;
   inset: 200px 0 !important;
@@ -90,6 +97,14 @@ function setControlBarHidden(enabled) {
   ensureStyle();
   document.documentElement.classList.toggle(
     CONTROL_BAR_HIDDEN_CLASS_NAME,
+    Boolean(enabled)
+  );
+}
+
+function setPlayTimeHidden(enabled) {
+  ensureStyle();
+  document.documentElement.classList.toggle(
+    PLAY_TIME_HIDDEN_CLASS_NAME,
     Boolean(enabled)
   );
 }
@@ -489,6 +504,10 @@ chrome.storage.local.get(
   }
 );
 
+chrome.storage.local.get({ [PLAY_TIME_STORAGE_KEY]: false }, (items) => {
+  setPlayTimeHidden(items[PLAY_TIME_STORAGE_KEY]);
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
 
@@ -512,6 +531,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
   if (changes[HIGHLIGHT_CARD_FILTER_STORAGE_KEY]) {
     setHighlightCardFilter(changes[HIGHLIGHT_CARD_FILTER_STORAGE_KEY].newValue);
+  }
+
+  if (changes[PLAY_TIME_STORAGE_KEY]) {
+    setPlayTimeHidden(changes[PLAY_TIME_STORAGE_KEY].newValue);
   }
 });
 

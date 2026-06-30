@@ -14,6 +14,10 @@ const SETTINGS = {
   highlightCardFilter: {
     key: "filterHighlightCardsOnly",
     defaultValue: false
+  },
+  playTime: {
+    key: "hidePlayTime",
+    defaultValue: false
   }
 };
 
